@@ -62,18 +62,27 @@ def extract_text_from_file(uploaded_file):
         return "❌ Unsupported file type"
 
 def call_openrouter_api(prompt):
-    """Send request to OpenRouter API using manual API key."""
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
     payload = {
         "model": OPENROUTER_MODEL,
         "prompt": prompt,
         "max_tokens": 2000
     }
-    response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json().get("completion", "")
-    else:
-        return f"❌ OpenRouter Error {response.status_code}: {response.text}"
+    try:
+        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
+        response.raise_for_status()  # Raises HTTPError for bad status
+        data = response.json()
+        # Depending on the response structure:
+        return data.get("completion") or data.get("response") or ""
+    except requests.exceptions.HTTPError as e:
+        return f"❌ HTTP Error: {e}"
+    except requests.exceptions.ConnectionError:
+        return "⚠️ Could not connect to OpenRouter API. Check API key and URL."
+    except requests.exceptions.Timeout:
+        return "⚠️ OpenRouter request timed out"
+    except Exception as e:
+        return f"⚠️ API request failed: {e}"
+
 
 
 st.set_page_config(page_title="Smartin", layout="wide")

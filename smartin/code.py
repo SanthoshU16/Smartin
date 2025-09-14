@@ -29,17 +29,22 @@ def extract_text_from_file(uploaded_file):
     if uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
         return "".join([p.extract_text() for p in pdf_reader.pages if p.extract_text()])
-
+    
     elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = Document(uploaded_file)
         return "\n".join([para.text for para in doc.paragraphs])
-
+    
     elif uploaded_file.type.startswith("image/"):
+        from PIL import Image
         image = Image.open(uploaded_file)
+        import pytesseract
+        # Set the tesseract path
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
         return pytesseract.image_to_string(image)
-
+    
     else:
         return "❌ Unsupported file type"
+
 
 # -------- App Setup --------
 st.set_page_config(page_title="Smartin", layout="wide")

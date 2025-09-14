@@ -13,7 +13,7 @@ HISTORY_FILE = "chat_history.json"
 
 OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
 OPENROUTER_API_KEY = "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"  
-OPENROUTER_URL = "https://api.openrouter.ai/v1/completions"
+OPENROUTER_URL = "https://openrouter.ai/meta-llama/llama-3.3-8b-instruct:free/api"
 
 
 OCR_SPACE_API_KEY = "K82144717888957"  

@@ -3,16 +3,22 @@ import requests
 import PyPDF2
 from docx import Document
 from PIL import Image
-import tempfile
+import base64
 import os
 import json
 
 
 HISTORY_FILE = "chat_history.json"
+
+
 OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
+OPENROUTER_API_KEY = "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"  
+OPENROUTER_URL = "https://api.openrouter.ai/v1/completions"
 
 
-OPENROUTER_API_KEY ="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"
+OCR_SPACE_API_KEY = "K82144717888957"  
+OCR_SPACE_URL = "https://api.ocr.space/parse/image"
+
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -24,17 +30,8 @@ def save_history(chats):
     with open(HISTORY_FILE, "w") as f:
         json.dump(chats, f, indent=2)
 
-def ocr_space_file(file_path, api_key):
-    """Call OCR.Space API and return extracted text."""
-    payload = {'apikey':'K82144717888957', 'language': 'eng'}
-    with open(file_path, 'rb') as f:
-        response = requests.post('https://api.ocr.space/parse/image', data=payload, files={'file': f})
-    result = response.json()
-    text = result['ParsedResults'][0]['ParsedText'] if result.get('ParsedResults') else ''
-    return text
-
-def extract_text_from_file(uploaded_file, ocr_api_key=None):
-    """Extract text from PDF, Word, or Image (using OCR API)."""
+def extract_text_from_file(uploaded_file):
+    """Extract text from PDF, Word, or Image (OCR.Space for images)."""
     if uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
         return "".join([p.extract_text() for p in pdf_reader.pages if p.extract_text()])
@@ -44,16 +41,40 @@ def extract_text_from_file(uploaded_file, ocr_api_key=None):
         return "\n".join([para.text for para in doc.paragraphs])
 
     elif uploaded_file.type.startswith("image/"):
-        if ocr_api_key:
-            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-                tmp_file.write(uploaded_file.read())
-                tmp_file_path = tmp_file.name
-            return ocr_space_file(tmp_file_path, ocr_api_key)
+        
+        img_bytes = uploaded_file.read()
+        encoded_img = base64.b64encode(img_bytes).decode()
+        data = {
+            "base64Image": f"data:{uploaded_file.type};base64,{encoded_img}",
+            "language": "eng",
+            "apikey": OCR_SPACE_API_KEY
+        }
+        response = requests.post(OCR_SPACE_URL, data=data)
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("IsErroredOnProcessing"):
+                return f"❌ OCR Error: {result.get('ErrorMessage')}"
+            else:
+                return result["ParsedResults"][0]["ParsedText"]
         else:
-            return "❌ OCR API key not provided"
-
+            return f"❌ OCR request failed: {response.status_code}"
     else:
         return "❌ Unsupported file type"
+
+def call_openrouter_api(prompt):
+    """Send request to OpenRouter API using manual API key."""
+    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "prompt": prompt,
+        "max_tokens": 2000
+    }
+    response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
+    if response.status_code == 200:
+        return response.json().get("completion", "")
+    else:
+        return f"❌ OpenRouter Error {response.status_code}: {response.text}"
+
 
 st.set_page_config(page_title="Smartin", layout="wide")
 
@@ -90,9 +111,6 @@ with st.sidebar:
                         st.session_state.current_chat = next(iter(st.session_state.chats), None)
                     st.experimental_rerun()
 
-    st.header("⚙️ Settings")
-    ocr_api_key = st.text_input("OCR API Key", type="password")
-
 
 if not st.session_state.chats:
     st.session_state.chats["chat_1"] = {"title": "New Chat", "messages": []}
@@ -106,7 +124,7 @@ current_chat = st.session_state.chats[st.session_state.current_chat]
 
 uploaded_file = st.file_uploader("Upload a PDF, Word doc, or Image", type=["pdf", "docx", "png", "jpg", "jpeg"])
 if uploaded_file:
-    extracted_text = extract_text_from_file(uploaded_file, ocr_api_key)
+    extracted_text = extract_text_from_file(uploaded_file)
     st.session_state.doc_text = extracted_text
     st.success("✅ File uploaded and processed!")
 
@@ -128,15 +146,10 @@ if prompt := st.chat_input("Ask about your file or general..."):
 
     final_prompt = f"{context}\n\nQuestion: {prompt}"
 
-    payload = {"model": OLLAMA_MODEL, "prompt": final_prompt, "stream": False}
-    try:
-        response = requests.post(OLLAMA_URL, json=payload)
-        if response.status_code == 200:
-            answer = response.json().get("response", "").strip()
-        else:
-            answer = f"❌ Error {response.status_code}: {response.text}"
-    except Exception as e:
-        answer = f"⚠️ Request failed: {e}"
+    if OPENROUTER_API_KEY:
+        answer = call_openrouter_api(final_prompt)
+    else:
+        answer = "❌ OpenRouter API key not provided"
 
     current_chat["messages"].append({"role": "assistant", "content": answer})
     with st.chat_message("assistant"):

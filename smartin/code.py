@@ -10,7 +10,7 @@ import io
 # ========== CONFIG ==========
 OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
 OPENROUTER_API_KEY = "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"  # ⬅️ Enter your OpenRouter API key here
-OPENROUTER_URL = "https://api.openrouter.ai/v1/completions"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/completions"
 
 OCR_API_KEY = "K82144717888957"  # ⬅️ Enter your OCR.Space API key here
 OCR_URL = "https://api.ocr.space/parse/image"
@@ -62,7 +62,10 @@ def extract_text_from_file(uploaded_file):
 
 
 def call_openrouter_api(prompt):
-    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "model": OPENROUTER_MODEL,
         "prompt": prompt,
@@ -70,18 +73,15 @@ def call_openrouter_api(prompt):
     }
     try:
         response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+        if response.status_code != 200:
+            return f"⚠️ API error {response.status_code}: {response.text[:200]}"
         try:
             data = response.json()
-            return data.get("completion") or data.get("response") or str(data)
+            return data.get("choices", [{}])[0].get("text", "⚠️ No text in response")
         except ValueError:
-            return f"⚠️ API returned non-JSON response: {response.text[:200]}"
+            return f"⚠️ Non-JSON response: {response.text[:200]}"
     except requests.exceptions.ConnectionError:
-        return "⚠️ Could not connect to OpenRouter API. Check API key and URL."
-    except requests.exceptions.Timeout:
-        return "⚠️ OpenRouter request timed out"
-    except Exception as e:
-        return f"⚠️ API request failed: {e}"
-
+        return "⚠️ Could not connect to OpenRouter API. Check API key and URL"
 
 # ========== UI SETUP ==========
 st.set_page_config(page_title="Smartin", layout="wide")

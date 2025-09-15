@@ -8,8 +8,8 @@ import os
 import io
 
 # -------- OpenRouter Config --------
-OPENROUTER_MODEL = "deepseek/deepseek-chat-v3.1:free"
-OPENROUTER_API_KEY = "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"  # <-- Your full API key
+OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"] # <-- Your full API key
 OPENROUTER_URL = "https://openrouter.ai/api/v1/completions"
 
 OCR_API_KEY = "K82144717888957"  # ⬅️ Enter your OCR.Space API key here

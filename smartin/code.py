@@ -3,22 +3,22 @@ import requests
 import PyPDF2
 from docx import Document
 from PIL import Image
-import base64
-import os
 import json
+import os
+import io
 
+# ========== CONFIG ==========
+OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
+OPENROUTER_API_KEY = "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"  # ⬅️ Enter your OpenRouter API key here
+OPENROUTER_URL = "https://api.openrouter.ai/v1/completions"
+
+OCR_API_KEY = "K82144717888957"  # ⬅️ Enter your OCR.Space API key here
+OCR_URL = "https://api.ocr.space/parse/image"
 
 HISTORY_FILE = "chat_history.json"
 
 
-OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
-OPENROUTER_API_KEY = "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"  
-OPENROUTER_URL = "https://api.openrouter.ai/v1/completions"
-
-
-OCR_SPACE_API_KEY = "K82144717888957"  
-OCR_SPACE_URL = "https://api.ocr.space/parse/image"
-
+# ========== HELPERS ==========
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -30,36 +30,36 @@ def save_history(chats):
     with open(HISTORY_FILE, "w") as f:
         json.dump(chats, f, indent=2)
 
+
 def extract_text_from_file(uploaded_file):
-    """Extract text from PDF, Word, or Image (OCR.Space for images)."""
+    # --- PDF ---
     if uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
         return "".join([p.extract_text() for p in pdf_reader.pages if p.extract_text()])
 
+    # --- Word ---
     elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = Document(uploaded_file)
         return "\n".join([para.text for para in doc.paragraphs])
 
+    # --- Image (OCR.Space API) ---
     elif uploaded_file.type.startswith("image/"):
-        
-        img_bytes = uploaded_file.read()
-        encoded_img = base64.b64encode(img_bytes).decode()
-        data = {
-            "base64Image": f"data:{uploaded_file.type};base64,{encoded_img}",
-            "language": "eng",
-            "apikey": OCR_SPACE_API_KEY
-        }
-        response = requests.post(OCR_SPACE_URL, data=data)
-        if response.status_code == 200:
-            result = response.json()
-            if result.get("IsErroredOnProcessing"):
-                return f"❌ OCR Error: {result.get('ErrorMessage')}"
+        files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
+        data = {"apikey": OCR_API_KEY, "language": "eng"}
+        try:
+            res = requests.post(OCR_URL, files=files, data=data, timeout=40)
+            result = res.json()
+            parsed = result.get("ParsedResults")
+            if parsed:
+                return parsed[0].get("ParsedText", "").strip()
             else:
-                return result["ParsedResults"][0]["ParsedText"]
-        else:
-            return f"❌ OCR request failed: {response.status_code}"
+                return "⚠️ OCR failed to extract text."
+        except Exception as e:
+            return f"⚠️ OCR request failed: {e}"
+
     else:
         return "❌ Unsupported file type"
+
 
 def call_openrouter_api(prompt):
     headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
@@ -69,13 +69,12 @@ def call_openrouter_api(prompt):
         "max_tokens": 2000
     }
     try:
-        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=20)
-        response.raise_for_status()  # Raises HTTPError for bad status
-        data = response.json()
-        # Depending on the response structure:
-        return data.get("completion") or data.get("response") or ""
-    except requests.exceptions.HTTPError as e:
-        return f"❌ HTTP Error: {e}"
+        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
+        try:
+            data = response.json()
+            return data.get("completion") or data.get("response") or str(data)
+        except ValueError:
+            return f"⚠️ API returned non-JSON response: {response.text[:200]}"
     except requests.exceptions.ConnectionError:
         return "⚠️ Could not connect to OpenRouter API. Check API key and URL."
     except requests.exceptions.Timeout:
@@ -84,7 +83,7 @@ def call_openrouter_api(prompt):
         return f"⚠️ API request failed: {e}"
 
 
-
+# ========== UI SETUP ==========
 st.set_page_config(page_title="Smartin", layout="wide")
 
 if "chats" not in st.session_state:
@@ -95,9 +94,10 @@ if "doc_text" not in st.session_state:
     st.session_state.doc_text = ""
 
 
+# ========== SIDEBAR ==========
 with st.sidebar:
     st.header("📚 Chats")
-    
+
     if st.button("➕ New chat"):
         new_id = f"chat_{len(st.session_state.chats)+1}"
         st.session_state.chats[new_id] = {"title": "New Chat", "messages": []}
@@ -117,10 +117,14 @@ with st.sidebar:
                     del st.session_state.chats[chat_id]
                     save_history(st.session_state.chats)
                     if st.session_state.current_chat == chat_id:
-                        st.session_state.current_chat = next(iter(st.session_state.chats), None)
-                    st.experimental_rerun()
+                        if st.session_state.chats:
+                            st.session_state.current_chat = next(iter(st.session_state.chats))
+                        else:
+                            st.session_state.current_chat = None
+                    st.rerun()
 
 
+# ========== INIT CHAT ==========
 if not st.session_state.chats:
     st.session_state.chats["chat_1"] = {"title": "New Chat", "messages": []}
     st.session_state.current_chat = "chat_1"
@@ -131,13 +135,15 @@ elif not st.session_state.current_chat or st.session_state.current_chat not in s
 current_chat = st.session_state.chats[st.session_state.current_chat]
 
 
-uploaded_file = st.file_uploader("Upload a PDF, Word doc, or Image", type=["pdf", "docx", "png", "jpg", "jpeg"])
+# ========== FILE UPLOAD ==========
+uploaded_file = st.file_uploader("📁 Upload PDF, Word, or Image", type=["pdf", "docx", "png", "jpg", "jpeg"])
 if uploaded_file:
     extracted_text = extract_text_from_file(uploaded_file)
     st.session_state.doc_text = extracted_text
     st.success("✅ File uploaded and processed!")
 
 
+# ========== CHAT UI ==========
 st.title(current_chat["title"])
 
 for msg in current_chat["messages"]:
@@ -154,11 +160,7 @@ if prompt := st.chat_input("Ask about your file or general..."):
         context = f"The following is the uploaded file content:\n{st.session_state.doc_text[:4000]}"
 
     final_prompt = f"{context}\n\nQuestion: {prompt}"
-
-    if OPENROUTER_API_KEY:
-        answer = call_openrouter_api(final_prompt)
-    else:
-        answer = "❌ OpenRouter API key not provided"
+    answer = call_openrouter_api(final_prompt)
 
     current_chat["messages"].append({"role": "assistant", "content": answer})
     with st.chat_message("assistant"):

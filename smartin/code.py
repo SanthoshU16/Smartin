@@ -12,7 +12,7 @@ OPENROUTER_MODEL = "meta-llama/llama-3.3-8b-instruct:free"
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"] # <-- Your full API key
 OPENROUTER_URL = "https://openrouter.ai/api/v1/completions"
 
-OCR_API_KEY = "K82144717888957"  # ⬅️ Enter your OCR.Space API key here
+OCR_API_KEY = st.secrets["OCR_API_KEY"]  # ⬅️ Enter your OCR.Space API key here
 OCR_URL = "https://api.ocr.space/parse/image"
 
 HISTORY_FILE = "chat_history.json"

@@ -4,6 +4,9 @@ Smartin AI is an intelligent **ChatGPT-style chatbot** built with **Streamlit** 
 
 It combines **LLM-powered reasoning** with **document understanding** and **OCR**, delivering fast, accurate answers through a clean chat interface.
 
+
+# 📌 Live Demo :
+👉 [https://lnkd.in/g5-eMdT6]
 ---
 
 ## 🚀 Features

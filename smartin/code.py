@@ -7,14 +7,9 @@ import os
 
 # ================= CONFIG =================
 
-OPENROUTER_MODELS = [
-    "meta-llama/llama-3.1-8b-instruct:free",
-    "mistralai/mistral-7b-instruct:free",
-    "google/gemma-2-9b-it:free"
-]
-
-OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 OCR_API_KEY = st.secrets["OCR_API_KEY"]
 OCR_URL = "https://api.ocr.space/parse/image"
@@ -63,47 +58,38 @@ def extract_text_from_file(uploaded_file):
 
     return "❌ Unsupported file type"
 
-def call_openrouter(prompt):
+def call_llm(prompt):
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://streamlit.io",
-        "X-Title": "Smartin AI"
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
 
-    for model in OPENROUTER_MODELS:
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 800
-        }
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1200
+    }
 
-        response = requests.post(
-            OPENROUTER_URL,
-            headers=headers,
-            json=payload,
-            timeout=40
-        )
+    response = requests.post(
+        GROQ_URL,
+        headers=headers,
+        json=payload,
+        timeout=40
+    )
 
-        st.sidebar.write("MODEL:", model)
-        st.sidebar.write("STATUS:", response.status_code)
-        st.sidebar.write("RAW RESPONSE:", response.text[:500])
+    if response.status_code != 200:
+        return f"⚠️ API error {response.status_code}: {response.text}"
 
-        if response.status_code == 200:
-            data = response.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"]
-
-    return "❌ No model returned a valid response."
-
+    return response.json()["choices"][0]["message"]["content"]
 
 
 # ================= UI SETUP =================
 
-st.set_page_config(page_title="Smartin", layout="wide")
+st.set_page_config(page_title="Smartin AI", layout="wide")
 
 if "chats" not in st.session_state:
     st.session_state.chats = load_history()
@@ -190,7 +176,7 @@ if prompt := st.chat_input("Ask about your file or general..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            answer = call_openrouter(final_prompt)
+            answer = call_llm(final_prompt)
             st.markdown(answer)
 
     current_chat["messages"].append({"role": "assistant", "content": answer})

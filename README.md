@@ -6,7 +6,7 @@ It combines **LLM-powered reasoning** with **document understanding** and **OCR*
 
 
 # 📌 Live Demo :
-👉 [https://lnkd.in/g5-eMdT6]
+👉 [https://smartin-assistant.streamlit.app/]
 ---
 
 ## 🚀 Features

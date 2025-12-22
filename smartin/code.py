@@ -75,29 +75,30 @@ def call_openrouter(prompt):
         payload = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "You are a helpful AI assistant. Use uploaded documents if provided."},
+                {"role": "system", "content": "You are a helpful AI assistant."},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 1500,
-            "temperature": 0.7
+            "max_tokens": 800
         }
 
-        try:
-            response = requests.post(
-                OPENROUTER_URL,
-                headers=headers,
-                json=payload,
-                timeout=40
-            )
+        response = requests.post(
+            OPENROUTER_URL,
+            headers=headers,
+            json=payload,
+            timeout=40
+        )
 
-            if response.status_code == 200:
-                data = response.json()
+        st.sidebar.write("MODEL:", model)
+        st.sidebar.write("STATUS:", response.status_code)
+        st.sidebar.write("RAW RESPONSE:", response.text[:500])
+
+        if response.status_code == 200:
+            data = response.json()
+            if "choices" in data:
                 return data["choices"][0]["message"]["content"]
 
-        except Exception:
-            continue
+    return "❌ No model returned a valid response."
 
-    return "⚠️ All models failed. Please try again later."
 
 
 # ================= UI SETUP =================
